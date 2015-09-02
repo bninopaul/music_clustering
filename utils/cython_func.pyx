@@ -1,9 +1,10 @@
+
 cimport numpy as np
 import numpy as np
 cimport cython
 
 @cython.boundscheck(False)
-def _partitionc(np.ndarray[dtype = np.int16_t , ndim = 1] signal, int window_length, int jump):
+def _partitionc(np.ndarray[dtype = np.int64_t , ndim = 1] signal, int window_length, int jump):
     """
     Params:
     signal: (one-dimensional array)
@@ -15,22 +16,24 @@ def _partitionc(np.ndarray[dtype = np.int16_t , ndim = 1] signal, int window_len
     """
 
     cdef int signal_length
-    cdef np.ndarray[dtype = long, ndim = 1] beg_index, end_index
-    cdef np.ndarray[dtype = np.int16_t, ndim = 2] partitions
+    #cdef np.ndarray[dtype = np.int64_t, ndim = 1] beg_index, end_index
+
     signal_length = len(signal)
-    signal_index = xrange(signal_length - window_length)
+    signal_index = np.arange(signal_length - window_length)
     beg_index = np.array(filter(lambda x: x%jump==0, signal_index))
     end_index = beg_index + window_length
     zipped = zip(beg_index, end_index)
 
-    partitions = np.array([signal[i[0]:i[1]] for i in zipped])
+    partitions = [signal[i[0]:i[1]] for i in zipped]
     return partitions
 
-
+rate = 44100
+window = 15*rate
+jump = rate
 #Spectral Centroid
 #Source: https://en.wikipedia.org/wiki/Spectral_centroid
 @cython.boundscheck(False)
-def _spectral_centroidc(np.ndarray[dtype = np.int16_t, ndim =1 ]signal, float rate):
+def _spectral_centroidc(np.ndarray[dtype = np.int64_t, ndim =1] signal, float rate):
     """
     Params:
     signal: (one-dimensional array)
@@ -47,7 +50,7 @@ def _spectral_centroidc(np.ndarray[dtype = np.int16_t, ndim =1 ]signal, float ra
     spectral_centroid = np.dot(fft_mag, freq)/sum(fft_mag)
     return spectral_centroid
 @cython.boundscheck(False)
-def spectral_centroid_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal, int rate, int window_length, int jump):
+def spectral_centroid_meanstdc(np.ndarray[dtype = np.int64_t, ndim = 1] signal, int rate = rate, int window_length = window , int jump = jump):
     """
     Params:
     signal:(one-dimensional array)
@@ -71,7 +74,7 @@ def spectral_centroid_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal, 
 #Spectral Roll-Off
 #Source: http://webhome.csc.uvic.ca/~gtzan/output/tsap02gtzan.pdf
 @cython.boundscheck(False)
-def _spectral_rolloffc(np.ndarray[dtype = np.int16_t, ndim = 1] signal):
+def _spectral_rolloffc(np.ndarray[dtype = np.int64_t, ndim = 1] signal):
     """
     Params:
     signal: (one-dimensional array)
@@ -89,7 +92,7 @@ def _spectral_rolloffc(np.ndarray[dtype = np.int16_t, ndim = 1] signal):
     return spectral_rolloff
 
 @cython.boundscheck(False)
-def spectral_rolloff_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal, int window_length, int jump):
+def spectral_rolloff_meanstdc(np.ndarray[dtype = np.int64_t, ndim = 1] signal, int window_length = window, int jump = jump):
     """
     Params:
     signal: (one-dimensional array)
@@ -100,7 +103,7 @@ def spectral_rolloff_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal, i
     roll_off_mean: (float) mean of the spectral roll-offs of the windows generated from the signal
     roll_off_std: (float) standard deviation of the spectral roll-offs of the windows generated from the signal
     """
-    cdef np.ndarray[dtype = np.int16_t, ndim = 2] partitions
+
     cdef float roll_off_mean, roll_off_std
 
     partitions = _partitionc(signal, window_length, jump)
@@ -114,7 +117,7 @@ def spectral_rolloff_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal, i
 #Source: http://webhome.csc.uvic.ca/~gtzan/output/tsap02gtzan.pdf
 #spectral flow and spectral flux are the same thing.
 @cython.boundscheck(False)
-def spectral_flow_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal,int window_length,int jump):
+def spectral_flow_meanstdc(np.ndarray[dtype = np.int64_t, ndim = 1] signal,int window_length = window, int jump = jump):
     """
     Params:
     signal: (one-dimensional array)
@@ -125,13 +128,13 @@ def spectral_flow_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal,int w
     flow_mean: (float) mean of the spectral flow of the signal
     flow_std: (float) standard deviation of the spectral flow of the signal
     """
-    cdef np.ndarray[dtype = long, ndim = 2] partitions,
-    cdef np.ndarray[dtype = double, ndim = 2] normalized_partitions, Nt, Nt1,
-    cdef np.ndarray[dtype = double, ndim = 1] Ft
+    cdef np.ndarray[dtype = np.int64_t, ndim = 2] partitions,
+    cdef np.ndarray[dtype = np.float64_t, ndim = 2] normalized_partitions, Nt, Nt1,
+    cdef np.ndarray[dtype = np.float64_t, ndim = 1] Ft
     cdef int n
     cdef float flow_mean, flow_std
 
-    partitions = _partitionc(signal, window_length, jump).astype(int)
+    partitions = np.array(_partitionc(signal, window_length, jump))
     n = len(partitions)
     normalized_partitions = partitions/np.linalg.norm(partitions, axis =1).reshape((n, 1))
 
@@ -146,7 +149,7 @@ def spectral_flow_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal,int w
 #Spectral Crossing Rate
 #Source: http://webhome.csc.uvic.ca/~gtzan/output/tsap02gtzan.pdf
 @cython.boundscheck(False)
-def zero_crossing_rate_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal, int window_length, int jump):
+def zero_crossing_rate_meanstdc(np.ndarray[dtype = np.int64_t, ndim = 1] signal, int window_length = window, int jump = jump):
     """
     Params:
     signal: (one-dimensional array)
@@ -157,10 +160,10 @@ def zero_crossing_rate_meanstdc(np.ndarray[dtype = np.int16_t, ndim = 1] signal,
     zero_crossing_rate_mean: (float) mean of the zero crossing rates of the windows
     zero_crossing_rate_std: (float) standard deviation of the zero crossing rates of the windows
     """
-    cdef np.ndarray[dtype = short, ndim = 2] partitions,
+    cdef np.ndarray[dtype = np.int64_t, ndim = 2] partitions,
     cdef float m,n, zero_crossing_rate_mean, zero_crossing_rate_std
 
-    partitions = _partitionc(signal, window_length, jump)
+    partitions = np.array(_partitionc(signal, window_length, jump))
     m,n = np.shape(partitions)
     sign, sign1 = partitions[:, 1:]>0, partitions[:, :n-1]>0
     zero_crossing_rate  = (np.sum(np.abs(sign - sign1), axis = 1))/n
@@ -186,7 +189,7 @@ def rms_energy(signal):
     return rmsenergy
 
 @cython.boundscheck(False)
-def lowenergy_featurec(np.ndarray[dtype = np.int16_t, ndim = 1] signal, int aw_windowlength, int tw_windowlength, int jump):
+def lowenergy_featurec(np.ndarray[dtype = np.int64_t, ndim = 1] signal, int aw_windowlength = 5*rate, int tw_windowlength = 10*rate, int jump = jump):
     """
     Params:
     signal: (one-dimensional array)
@@ -200,13 +203,21 @@ def lowenergy_featurec(np.ndarray[dtype = np.int16_t, ndim = 1] signal, int aw_w
     """
     if tw_windowlength< aw_windowlength:
         raise ValueError
-    cdef np.ndarray[dtype = np.int16_t, ndim = 2] partitions_analysis, partitions_texture
+    cdef np.ndarray[dtype = np.int64_t, ndim = 2] partitions_analysis, partitions_texture
     cdef float lowenergy_percentage
 
-    partitions_analysis = _partitionc(signal, aw_windowlength, jump)
-    partitions_texture = _partitionc(signal, tw_windowlength, jump)
+    partitions_analysis = np.array(_partitionc(signal, aw_windowlength, jump))
+    partitions_texture = np.array(_partitionc(signal, tw_windowlength, jump))
     rmsenergy_analysis = map(lambda x: rms_energy(x.astype(int)), partitions_analysis)
     rmsenergy_texture = map(lambda x: rms_energy(x.astype(int)), partitions_texture)
     ave_rmsenergy_texture = np.mean(rmsenergy_texture)
     lowenergy_percentage = np.mean(rmsenergy_analysis<ave_rmsenergy_texture)
     return lowenergy_percentage
+
+def feature_wrapper(signal):
+    centmean, centstd = spectral_centroid_meanstdc(signal)
+    rollmean, rollstd = spectral_rolloff_meanstdc(signal)
+    flowmean, flowstd = spectral_flow_meanstdc(signal)
+    zrcmean, zrcstd = zero_crossing_rate_meanstdc(signal)
+    lowenergy = lowenergy_featurec(signal)
+    return [centmean, centstd, rollmean, rollstd, flowmean, flowstd, zrcmean, zrcstd, lowenergy]
